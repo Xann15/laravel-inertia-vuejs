@@ -1,11 +1,13 @@
 <!-- Components/ReservationForm.vue -->
 <script setup>
-import { ref, inject } from 'vue'
+import { ref, inject, onMounted, watch, nextTick } from 'vue'
 
 const tabSystem = inject('tabSystem')
 
 const formData = ref({
-    property: '', arrival: new Date().toISOString().split('T')[0], nights: 1,
+    property: '',
+    arrival: new Date().toISOString().split('T')[0],
+    nights: 1,
     departure: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     folio: '', folioGroup: '', status: '', title: 'Mr', firstName: '', lastName: '',
     adult: 2, child: 0, infant: 0, vip: '', birthday: new Date().toISOString().split('T')[0],
@@ -18,25 +20,231 @@ const formData = ref({
     cashierRemark: '', receptionRemark: '', outletRemark: ''
 })
 
+// Ref untuk input nights dan flatpickr instances
+const nightsDisplay = ref(1)
+const arrivalPicker = ref(null)
+const departurePicker = ref(null)
+const isInitializing = ref(true)
+
 // Flatpickr options
 const flatpickrOptions = {
     locale: 'id',
-    dateFormat: 'Y-m-d', // Format value yang tersimpan
-    altFormat: 'd-M-Y',  // Format tampilan: 10-Oct-2025
-    altInput: true,      // Menampilkan input alternatif
-    allowInput: true,
-    clickOpens: true,
-    minDate: 'today',
-    position: 'auto'
+    dateFormat: 'Y-m-d',
+    altFormat: 'd-M-Y',
+    altInput: true,
+    allowInput: false,
+    minDate: new Date().toISOString().split('T')[0],
 }
 
-function updateNights(inc) {
-    const n = Math.max(1, formData.value.nights + inc)
-    const arr = new Date(formData.value.arrival)
-    const dep = new Date(arr.getTime() + n * 86400000)
-    formData.value.nights = n
-    formData.value.departure = dep.toISOString().split('T')[0]
+const departureOptions = ref({
+    locale: 'id',
+    dateFormat: 'Y-m-d',
+    altFormat: 'd-M-Y',
+    altInput: true,
+    allowInput: false,
+    minDate: getNextDay(formData.value.arrival),
+})
+
+// Helper: tambah hari dari tanggal tertentu
+function addDays(dateString, days) {
+    const d = new Date(dateString)
+    d.setDate(d.getDate() + days)
+    return d.toISOString().split('T')[0]
 }
+
+// Helper: tambah 1 hari dari tanggal tertentu
+function getNextDay(dateString) {
+    return addDays(dateString, 1)
+}
+
+// 🔹 Hitung selisih hari dengan cara yang lebih akurat
+function calculateNights(arrivalDate, departureDate) {
+    const arrival = new Date(arrivalDate)
+    const departure = new Date(departureDate)
+    arrival.setHours(12, 0, 0, 0)
+    departure.setHours(12, 0, 0, 0)
+    const diffTime = departure - arrival
+    const diffDays = diffTime / (1000 * 60 * 60 * 24)
+    return Math.max(1, Math.floor(diffDays))
+}
+
+// 🔹 Ketika Arrival berubah - UPDATE NIGHTS BERDASARKAN DEPARTURE (DEPARTURE TETAP)
+function handleArrivalChange(selectedDates) {
+    if (!selectedDates[0] || isInitializing.value) return
+
+    const arrivalDate = selectedDates[0].toISOString().split('T')[0]
+    formData.value.arrival = arrivalDate
+
+    // Update minDate untuk departure picker
+    const nextDay = getNextDay(arrivalDate)
+    if (departurePicker.value) {
+        departurePicker.value.set('minDate', nextDay)
+    }
+
+    // Hitung nights berdasarkan selisih arrival baru dan departure yang tetap
+    const nights = calculateNights(arrivalDate, formData.value.departure)
+
+    // Update nights
+    formData.value.nights = nights
+    nightsDisplay.value = nights
+
+    // Jika arrival baru >= departure yang ada, set departure ke next day dari arrival
+    if (nights < 1) {
+        const newDeparture = getNextDay(arrivalDate)
+        formData.value.departure = newDeparture
+        formData.value.nights = 1
+        nightsDisplay.value = 1
+
+        if (departurePicker.value) {
+            departurePicker.value.setDate(newDeparture)
+        }
+    }
+
+    console.log('Arrival changed:', {
+        arrival: arrivalDate,
+        departure: formData.value.departure,
+        nights: formData.value.nights
+    })
+}
+
+// 🔹 Ketika Departure berubah - UPDATE NIGHTS BERDASARKAN SELISIH
+function handleDepartureChange(selectedDates) {
+    if (!selectedDates[0] || isInitializing.value) return
+
+    const departureDate = selectedDates[0].toISOString().split('T')[0]
+    const arrivalDate = formData.value.arrival
+
+    // Hitung nights berdasarkan selisih
+    const nights = calculateNights(arrivalDate, departureDate)
+
+    // Update nights
+    formData.value.nights = nights
+    nightsDisplay.value = nights
+    formData.value.departure = departureDate
+
+    console.log('Departure changed:', {
+        arrival: arrivalDate,
+        departure: departureDate,
+        nights: nights
+    })
+}
+
+// 🔹 Tombol + / - untuk nights - UPDATE DEPARTURE BERDASARKAN NIGHTS
+function changeNights(delta) {
+    let nights = parseInt(formData.value.nights) || 1
+    nights = Math.max(1, nights + delta)
+    formData.value.nights = nights
+    nightsDisplay.value = nights
+
+    // Update departure berdasarkan nights baru
+    const newDeparture = addDays(formData.value.arrival, nights)
+    formData.value.departure = newDeparture
+
+    // Update departure picker
+    if (departurePicker.value) {
+        departurePicker.value.setDate(newDeparture)
+    }
+
+    console.log('Nights changed:', {
+        arrival: formData.value.arrival,
+        nights: nights,
+        departure: newDeparture
+    })
+}
+
+// 🔹 Saat user selesai mengetik manual di nights - UPDATE DEPARTURE
+function handleNightsBlur() {
+    let nights = parseInt(nightsDisplay.value) || 0
+
+    if (nights < 1) {
+        nights = 1
+        nightsDisplay.value = "1"
+    }
+
+    formData.value.nights = nights
+
+    // Update departure berdasarkan nights baru
+    const newDeparture = addDays(formData.value.arrival, nights)
+    formData.value.departure = newDeparture
+
+    // Update departure picker
+    if (departurePicker.value) {
+        departurePicker.value.setDate(newDeparture)
+    }
+
+    console.log('Nights manual input:', {
+        arrival: formData.value.arrival,
+        nights: nights,
+        departure: newDeparture
+    })
+}
+
+// 🔹 Filter input hanya angka
+function handleNightsInput(event) {
+    const raw = event.target.value.replace(/\D/g, "")
+    nightsDisplay.value = raw
+}
+
+// Custom directive untuk flatpickr dengan instance reference
+const vFlatpickrInstance = {
+    mounted(el, binding) {
+        import('flatpickr').then(module => {
+            const flatpickr = module.default
+            
+            // Buat instance flatpickr
+            const instance = flatpickr(el, {
+                ...binding.value,
+                onChange: function (selectedDates) {
+                    if (binding.arg === 'arrival') {
+                        handleArrivalChange(selectedDates)
+                    } else if (binding.arg === 'departure') {
+                        handleDepartureChange(selectedDates)
+                    }
+                }
+            })
+
+            // Simpan instance berdasarkan arg setelah flatpickr siap
+            if (binding.arg === 'arrival') {
+                arrivalPicker.value = instance
+            } else if (binding.arg === 'departure') {
+                departurePicker.value = instance
+            }
+
+            // Setelah semua flatpickr siap, nonaktifkan initializing
+            nextTick(() => {
+                if (arrivalPicker.value && departurePicker.value) {
+                    // Tunggu sedikit untuk memastikan flatpickr benar-benar siap
+                    setTimeout(() => {
+                        isInitializing.value = false
+                        console.log('All flatpickr instances ready - initializing disabled')
+                    }, 100)
+                }
+            })
+        })
+    },
+    unmounted(el) {
+        if (el._flatpickr) {
+            el._flatpickr.destroy()
+        }
+    }
+}
+
+// Watch untuk sinkronisasi nightsDisplay dengan formData.nights
+watch(() => formData.value.nights, (newNights) => {
+    nightsDisplay.value = newNights
+})
+
+// Inisialisasi
+onMounted(() => {
+    // Set initial nights display saja
+    nightsDisplay.value = formData.value.nights
+    
+    console.log('Component mounted with initial values:', {
+        arrival: formData.value.arrival,
+        departure: formData.value.departure,
+        nights: formData.value.nights
+    })
+})
 
 const showMore = ref(false)
 
@@ -46,7 +254,7 @@ function closeReservation() {
     }
 }
 
-// Tambahkan fungsi saveReservation di sini
+// Fungsi saveReservation (tetap sama)
 function saveReservation() {
     console.log('=== RESERVATION FORM DATA ===')
     console.table({
@@ -58,7 +266,7 @@ function saveReservation() {
         'Folio': formData.value.folio,
         'Folio Group': formData.value.folioGroup,
         'Status': formData.value.status,
-        
+
         // Guest Profile
         'Title': formData.value.title,
         'First Name': formData.value.firstName,
@@ -76,7 +284,7 @@ function saveReservation() {
         'Phone': formData.value.phone,
         'Email': formData.value.email,
         'Nationality': formData.value.nationality,
-        
+
         // Additional Info
         'Booking ID': formData.value.bookingID,
         'Language': formData.value.language,
@@ -89,7 +297,7 @@ function saveReservation() {
         'Credit Limit': formData.value.creditLimit,
         'Voucher No': formData.value.voucherNo,
         'Waiting List': formData.value.isWaitingList ? 'Yes' : 'No',
-        
+
         // Room & Rate
         'Room Type': formData.value.roomType,
         'Room Number': formData.value.roomNumber,
@@ -102,21 +310,20 @@ function saveReservation() {
         'Extra Bed Amount': formData.value.extraBedAmount,
         'Company Rate': formData.value.companyRate,
         'Pre-Posting Rate': formData.value.prePostingRate,
-        
+
         // Remarks
         'Cashier Remark': formData.value.cashierRemark,
         'Reception Remark': formData.value.receptionRemark,
         'Outlet Remark': formData.value.outletRemark
     })
-    
-    // Juga tampilkan dalam bentuk object biasa untuk detail lengkap
+
     console.log('=== FULL FORM DATA OBJECT ===')
     console.log(JSON.parse(JSON.stringify(formData.value)))
-    
-    // Alert untuk konfirmasi (opsional)
+
     alert('Reservation data has been saved! Check console for details.')
 }
 </script>
+
 
 <template>
     <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4">
@@ -148,25 +355,26 @@ function saveReservation() {
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 mb-1">📅 ARRIVAL</label>
-                        <input type="text" v-model="formData.arrival" v-flatpickr="flatpickrOptions"
-                            @change="updateDeparture"
+                        <input type="text" v-model="formData.arrival" v-flatpickr-instance:arrival="flatpickrOptions"
                             class="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 text-sm bg-white cursor-pointer"
                             placeholder="Pilih tanggal" readonly />
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 mb-1">🌙 NIGHTS</label>
                         <div class="flex gap-1">
-                            <button @click="updateNights(-1)"
+                            <button @click="changeNights(-1)"
                                 class="px-2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold transition">−</button>
-                            <input type="number" v-model.number="formData.nights" readonly
-                                class="w-12 text-center px-1 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-bold" />
-                            <button @click="updateNights(1)"
+                            <input type="text" v-model="nightsDisplay" @input="handleNightsInput"
+                                @blur="handleNightsBlur"
+                                class="w-12 text-center px-1 py-2 border border-gray-300 rounded-lg bg-white text-sm font-bold" />
+                            <button @click="changeNights(1)"
                                 class="px-2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold transition">+</button>
                         </div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 mb-1">📅 DEPARTURE</label>
-                        <input type="text" v-model="formData.departure" v-flatpickr="flatpickrOptions"
+                        <input type="text" v-model="formData.departure"
+                            v-flatpickr-instance:departure="departureOptions"
                             class="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 text-sm bg-white cursor-pointer"
                             placeholder="Pilih tanggal" readonly />
                     </div>
