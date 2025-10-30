@@ -12,6 +12,9 @@ import "flatpickr/dist/flatpickr.css";
 // Import custom directive
 import flatpickrDirective from './directives/flatpickr';
 
+// Import DevExtreme
+import 'devextreme/dist/css/dx.light.css';
+
 const appName = import.meta.env.VITE_APP_NAME || "FO Cloud 2026";
 
 createInertiaApp({

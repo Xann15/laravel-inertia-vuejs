@@ -20,6 +20,9 @@
     },
     "dependencies": {
         "@vueuse/motion": "^3.0.3",
+        "devextreme": "^23.2.3",
+        "devextreme-dist": "^25.1.6",
+        "devextreme-vue": "^23.2.3",
         "flatpickr": "^4.6.13"
     }
 }

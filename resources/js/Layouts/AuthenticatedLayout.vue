@@ -9,6 +9,7 @@ import { Link } from '@inertiajs/vue3'
 
 // Import komponen ReservationForm
 import ReservationForm from '@/Components/ReservationForm.vue'
+import ReservationGrid from '@/Components/ReservationGrid.vue'
 
 const showingNavigationDropdown = ref(false)
 const showSidebar = ref(false)
@@ -31,7 +32,7 @@ const navigationMenus = [
         icon: '📅', 
         submenu: [
           { title: 'New Reservation', icon: '➕', component: 'ReservationForm', url: '/reservation' },
-          { title: 'Reservation Browser', icon: '🔍', component: 'ReservationBrowser', url: '/reservation-browser' },
+          { title: 'Reservation Browser', icon: '🔍', component: 'ReservationGrid', url: '/reservation-browser' },
         ]
       },
       { title: 'Group Reservation', icon: '👥', component: 'GroupReservation', url: '/group-reservation' },
@@ -49,6 +50,7 @@ const navigationMenus = [
 // Komponen mapping untuk render dinamis
 const componentMap = {
   ReservationForm: ReservationForm,
+  ReservationGrid: ReservationGrid,
   // Komponen lain bisa ditambahkan di sini nanti
 }
 
