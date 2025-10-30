@@ -19,6 +19,7 @@
         "vue": "^3.4.0"
     },
     "dependencies": {
-        "@vueuse/motion": "^3.0.3"
+        "@vueuse/motion": "^3.0.3",
+        "flatpickr": "^4.6.13"
     }
 }

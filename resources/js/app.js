@@ -6,6 +6,12 @@ import { resolvePageComponent } from "laravel-vite-plugin/inertia-helpers";
 import { createApp, h } from "vue";
 import { ZiggyVue } from "../../vendor/tightenco/ziggy";
 
+// Import flatpickr styles
+import "flatpickr/dist/flatpickr.css";
+
+// Import custom directive
+import flatpickrDirective from './directives/flatpickr';
+
 const appName = import.meta.env.VITE_APP_NAME || "FO Cloud 2026";
 
 createInertiaApp({
@@ -19,6 +25,7 @@ createInertiaApp({
         return createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)
+            .directive('flatpickr', flatpickrDirective)
             .mount(el);
     },
     progress: {

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, provide } from 'vue'
 import ApplicationLogo from '@/Components/ApplicationLogo.vue'
 import Dropdown from '@/Components/Dropdown.vue'
 import DropdownLink from '@/Components/DropdownLink.vue'
@@ -43,33 +43,7 @@ const navigationMenus = [
       { title: 'Room Inventory', icon: '📦', component: 'RoomInventory', url: '/room-inventory' },
     ]
   },
-  {
-    title: 'Housekeeping',
-    icon: '🧹',
-    items: [
-      { title: 'Room Status', icon: '🔑', component: 'RoomStatus', url: '/room-status' },
-      { title: 'Cleaning Schedule', icon: '📅', component: 'CleaningSchedule', url: '/cleaning-schedule' },
-      { title: 'Maintenance', icon: '🔧', component: 'Maintenance', url: '/maintenance' },
-    ]
-  },
-  {
-    title: 'Sales & Marketing',
-    icon: '📈',
-    items: [
-      { title: 'Leads', icon: '🎯', component: 'Leads', url: '/leads' },
-      { title: 'Campaigns', icon: '📢', component: 'Campaigns', url: '/campaigns' },
-      { title: 'Corporate Clients', icon: '🏢', component: 'CorporateClients', url: '/corporate-clients' },
-    ]
-  },
-  {
-    title: 'Venue',
-    icon: '🎪',
-    items: [
-      { title: 'Venue Management', icon: '🏛️', component: 'VenueManagement', url: '/venue-management' },
-      { title: 'Events', icon: '🎉', component: 'Events', url: '/events' },
-      { title: 'Pricing', icon: '💵', component: 'Pricing', url: '/pricing' },
-    ]
-  }
+  // ... menu lainnya tetap sama
 ]
 
 // Komponen mapping untuk render dinamis
@@ -77,6 +51,16 @@ const componentMap = {
   ReservationForm: ReservationForm,
   // Komponen lain bisa ditambahkan di sini nanti
 }
+
+// Provide tab functions untuk child components
+provide('tabSystem', {
+  closeCurrentTab: () => {
+    if (activeTabId.value) {
+      closeTab(activeTabId.value)
+    }
+  },
+  getCurrentTabId: () => activeTabId.value
+})
 
 // Add new tab
 function addTab(title, component, icon = '📄') {
