@@ -7,6 +7,9 @@ import NavLink from '@/Components/NavLink.vue'
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue'
 import { Link } from '@inertiajs/vue3'
 
+// Import komponen ReservationForm
+import ReservationForm from '@/Components/ReservationForm.vue'
+
 const showingNavigationDropdown = ref(false)
 const showSidebar = ref(false)
 
@@ -27,7 +30,7 @@ const navigationMenus = [
         title: 'Reservation', 
         icon: '📅', 
         submenu: [
-          { title: 'New Reservation', icon: '➕', component: 'Reservation', url: '/reservation' },
+          { title: 'New Reservation', icon: '➕', component: 'ReservationForm', url: '/reservation' },
           { title: 'Reservation Browser', icon: '🔍', component: 'ReservationBrowser', url: '/reservation-browser' },
         ]
       },
@@ -68,6 +71,12 @@ const navigationMenus = [
     ]
   }
 ]
+
+// Komponen mapping untuk render dinamis
+const componentMap = {
+  ReservationForm: ReservationForm,
+  // Komponen lain bisa ditambahkan di sini nanti
+}
 
 // Add new tab
 function addTab(title, component, icon = '📄') {
@@ -118,6 +127,12 @@ function openMenuItem(item) {
 
 // Check if there are any tabs
 const hasTabs = computed(() => tabs.value.length > 0)
+
+// Get active tab component untuk render dinamis
+const activeTabComponent = computed(() => {
+  const activeTab = tabs.value.find(tab => tab.id === activeTabId.value)
+  return activeTab ? componentMap[activeTab.component] : null
+})
 
 defineExpose({ addTab })
 </script>
@@ -318,7 +333,14 @@ defineExpose({ addTab })
           v-show="activeTabId === tab.id"
           class="animate-fadeIn"
         >
-          <div class="p-6">
+          <!-- Render komponen dinamis untuk ReservationForm -->
+          <component 
+            :is="componentMap[tab.component]"
+            v-if="componentMap[tab.component]"
+          />
+          
+          <!-- Fallback untuk komponen yang belum dibuat -->
+          <div v-else class="p-6">
             <div class="mx-auto max-w-7xl">
               <!-- Tab Content Card -->
               <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
