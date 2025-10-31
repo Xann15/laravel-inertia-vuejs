@@ -1,15 +1,22 @@
 <!-- Components/ReservationForm.vue -->
 <script setup>
 import { ref, inject, onMounted, watch, nextTick } from 'vue'
+import { router } from '@inertiajs/vue3'
 import GuestGridModal from './GuestGridModal.vue'
+import axios from 'axios'
 
 const tabSystem = inject('tabSystem')
 
-// 🔹 Generate unique instance ID untuk setiap reservation form
-const instanceId = ref(`reservation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
-
 // 🔹 State untuk Guest Modal
 const showGuestModal = ref(false)
+const guests = ref([])
+const totalGuestCount = ref(0)
+const isLoadingGuests = ref(false)
+const searchQuery = ref('')
+const form = ref({ firstName: '' })
+
+// 🔹 Generate unique instance ID untuk setiap reservation form
+const instanceId = ref(`reservation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
 
 const formData = ref({
     property: '',
@@ -192,12 +199,29 @@ function handleNightsInput(event) {
     nightsDisplay.value = raw
 }
 
+// 🔹 Handler untuk FirstName input - DIPERBAIKI: Validasi ketat 3 karakter
+const handleFirstNameEnter = (e) => {
+    e.preventDefault()
+    if (formData.value.firstName.trim().length >= 3) {
+        searchQuery.value = formData.value.firstName.trim()
+        showGuestModal.value = true
+    }
+}
+
+const handleFirstNameTab = (e) => {
+    if (formData.value.firstName.trim().length >= 3) {
+        e.preventDefault()
+        searchQuery.value = formData.value.firstName.trim()
+        showGuestModal.value = true
+    }
+}
+
 // Custom directive untuk flatpickr dengan instance reference
 const vFlatpickrInstance = {
     mounted(el, binding) {
         import('flatpickr').then(module => {
             const flatpickr = module.default
-            
+
             // Buat instance flatpickr
             const instance = flatpickr(el, {
                 ...binding.value,
@@ -245,7 +269,7 @@ watch(() => formData.value.nights, (newNights) => {
 onMounted(() => {
     // Set initial nights display saja
     nightsDisplay.value = formData.value.nights
-    
+
     console.log('Component mounted with initial values:', {
         arrival: formData.value.arrival,
         departure: formData.value.departure,
@@ -330,35 +354,115 @@ function saveReservation() {
     alert('Reservation data has been saved! Check console for details.')
 }
 
-// 🔹 Guest Modal Functions
-function openGuestModal() {
+// 🔹 PERBAIKAN: Load guests dengan validasi ketat
+const loadGuests = async (params = {}) => {
+    // Validasi: hanya load jika search query >= 3 karakter atau tidak ada search
+    if (params.searchValue && params.searchValue.trim().length < 3) {
+        console.log('❌ Search query too short, skipping load:', params.searchValue)
+        guests.value = []
+        totalGuestCount.value = 0
+        return
+    }
+
+    isLoadingGuests.value = true
+
+    try {
+        const response = await axios.get('/api/reservations/guests', { params })
+        guests.value = response.data.data || []
+        totalGuestCount.value = response.data.totalCount || 0
+
+        console.log('✅ Guests loaded:', {
+            params: params,
+            totalCount: totalGuestCount.value,
+            guestsCount: guests.value.length,
+            guests: guests.value
+        })
+
+        await new Promise(resolve => setTimeout(resolve, 300))
+    } catch (error) {
+        console.error('❌ Error loading guests:', error)
+        guests.value = []
+        totalGuestCount.value = 0
+    } finally {
+        isLoadingGuests.value = false
+    }
+}
+
+// 🔹 PERBAIKAN: Fungsi buka modal dengan validasi ketat
+// 🔹 PERBAIKAN: Fungsi buka modal dengan validasi ketat
+async function openGuestModal() {
+    // Validasi: hanya buka modal jika firstName >= 3 karakter
+    // if (formData.value.firstName.trim().length < 3) {
+    //     console.log('❌ First name too short, cannot open modal:', formData.value.firstName)
+    //     alert('Please enter at least 3 characters in First Name to search for guests.')
+    //     return
+    // }
+
+    // Simpan search query dari firstName
+    searchQuery.value = formData.value.firstName.trim()
+
+    console.log('🔹 Opening guest modal with search:', searchQuery.value)
+
     showGuestModal.value = true
+
+    // Tunggu modal terbuka sepenuhnya
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Load data dengan search query yang sudah divalidasi
+    console.log('🔹 Auto-loading with search:', searchQuery.value)
+    loadGuests({
+        searchValue: searchQuery.value,
+        fields: 'GuestName,Phone,Email,TypeIDNumber,clientID',
+        skip: 0,
+        take: 20 // Sesuaikan dengan pageSize di modal
+    })
 }
 
 function closeGuestModal() {
     showGuestModal.value = false
+    // Jangan reset searchQuery di sini agar tetap tersimpan untuk下次buka
 }
 
 function handleGuestSelected(guest) {
+    console.table(guest);
     // Populate form dengan data guest yang dipilih
-    formData.value.title = guest.title
-    formData.value.firstName = guest.firstName
-    formData.value.lastName = guest.lastName
-    formData.value.phone = guest.phone
-    formData.value.email = guest.email
-    formData.value.city = guest.city
+    if (guest.guestName) {
+        const names = guest.guestName.split(" ")
+        formData.value.firstName = names[0]
+        formData.value.lastName = names.slice(1).join(" ") || ""
+    }
+    formData.value.title = guest.title || 'Mr'
+    formData.value.phone = guest.phone || ''
+    formData.value.email = guest.email || ''
+    formData.value.city = guest.city || ''
     formData.value.address = guest.address || ''
-    formData.value.nationality = guest.nationality
-    formData.value.identityType = guest.idType
-    formData.value.identityNumber = guest.idNumber
-    formData.value.birthday = guest.birthday || new Date().toISOString().split('T')[0]
+    formData.value.nationality = guest.nationality || 'Indonesia'
+    formData.value.identityType = guest.idType || 'KTP'
+    formData.value.identityNumber = guest.idNumber || ''
+    formData.value.birthday = guest.birthDate || new Date().toISOString().split('T')[0]
     formData.value.guestType = guest.guestType || 'Individual'
     formData.value.vip = guest.vip || ''
-    
+
     console.log('✅ Guest selected and populated:', guest)
+    closeGuestModal()
+}
+
+// 🔹 PERBAIKAN: Handle load-guests event dari modal dengan validasi ketat
+function handleLoadGuests(params) {
+    console.log('🔄 handleLoadGuests called with params:', params)
+    
+    // Validasi: hanya load jika search query >= 3 karakter atau tidak ada search
+    if (params.searchValue && params.searchValue.trim().length < 3) {
+        console.log('❌ Search query too short, skipping load:', params.searchValue)
+        guests.value = []
+        totalGuestCount.value = 0
+        return
+    }
+    
+    loadGuests(params)
 }
 </script>
-
 
 <template>
     <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4">
@@ -470,7 +574,8 @@ function handleGuestSelected(guest) {
                             <div class="col-span-4">
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">FIRST NAME <span
                                         class="text-red-500">*</span></label>
-                                <input v-model="formData.firstName"
+                                <input v-model="formData.firstName" @keydown.enter="handleFirstNameEnter"
+                                    @keydown.tab="handleFirstNameTab"
                                     class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
                             </div>
                             <div class="col-span-6">
@@ -478,9 +583,9 @@ function handleGuestSelected(guest) {
                                 <div class="flex gap-1">
                                     <input v-model="formData.lastName"
                                         class="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
-                                    <!-- 🔹 TOMBOL BUKA GUEST MODAL -->
+                                    <!-- 🔹 TOMBOL BUKA GUEST MODAL - DIPERBAIKI DENGAN VALIDASI -->
                                     <button @click="openGuestModal" type="button"
-                                        class="px-2 bg-indigo-100 hover:bg-indigo-200 rounded text-xs transition-colors">
+                                        class="px-3 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-xs transition-colors flex items-center">
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -810,12 +915,16 @@ function handleGuestSelected(guest) {
             </div>
 
         </div>
-    </div>
 
-    <!-- 🔹 GUEST GRID MODAL COMPONENT -->
-    <GuestGridModal 
-        :show="showGuestModal" 
-        @close="closeGuestModal"
-        @select-guest="handleGuestSelected"
-    />
+        <!-- 🔹 GUEST GRID MODAL COMPONENT - DIPERBAIKI -->
+        <GuestGridModal 
+            :show="showGuestModal" 
+            :guests="guests" 
+            :total-count="totalGuestCount"
+            :initial-search-value="searchQuery" 
+            :is-loading="isLoadingGuests"
+            @close="closeGuestModal" 
+            @select-guest="handleGuestSelected" 
+            @load-guests="handleLoadGuests" />
+    </div>
 </template>

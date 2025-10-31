@@ -39,7 +39,6 @@ const searchValue = ref('')
 const selectedFields = ref(['GuestName']) // Default checked: GuestName
 const selectAllFields = ref(false)
 const hasSearched = ref(false) // Flag untuk menandai apakah sudah melakukan search
-const isAutoSearching = ref(false) // Flag untuk mencegah multiple calls
 
 // DataGrid state
 const currentPage = ref(0)
@@ -75,20 +74,10 @@ watch(() => props.show, (newVal) => {
     if (newVal) {
         console.log('🔹 Modal opened with initialSearchValue:', props.initialSearchValue)
         
-        // Reset state
+        // Reset state - TIDAK AUTO LOAD
         currentPage.value = 0
         searchValue.value = props.initialSearchValue || ''
-        isAutoSearching.value = false
-        
-        // 🔹 PERBAIKAN: Jika ada initialSearchValue yang valid, langsung search
-        if (props.initialSearchValue && props.initialSearchValue.length >= 3) {
-            hasSearched.value = true
-            isAutoSearching.value = true
-            console.log('🔹 Auto-searching with:', props.initialSearchValue)
-            loadGuests()
-        } else {
-            hasSearched.value = false // Reset search flag hanya jika tidak ada initial search
-        }
+        hasSearched.value = false // Reset search flag
         
         // Auto focus search input
         nextTick(() => {
@@ -107,29 +96,10 @@ watch(() => props.show, (newVal) => {
         selectAllFields.value = false
         showSearchWarning.value = false
         hasSearched.value = false
-        isAutoSearching.value = false
         
         if (searchWarningTimer.value) {
             clearTimeout(searchWarningTimer.value)
         }
-    }
-})
-
-// 🔹 PERBAIKAN: Watch untuk guests data changes
-watch(() => props.guests, (newGuests) => {
-    console.log('📊 Guests data updated:', newGuests.length, 'items')
-    if (newGuests && newGuests.length > 0) {
-        isLoadingInternal.value = false
-        isAutoSearching.value = false
-    }
-})
-
-// 🔹 Watch untuk isLoading changes
-watch(() => props.isLoading, (newVal) => {
-    console.log('🔄 isLoading changed:', newVal)
-    isLoadingInternal.value = newVal
-    if (!newVal) {
-        isAutoSearching.value = false
     }
 })
 
@@ -151,7 +121,7 @@ watch(selectedFields, (newVal) => {
     }
 })
 
-// 🔹 PERBAIKAN: Load guests function dengan debounce
+// 🔹 Load guests function
 const loadGuests = () => {
     console.log('🔄 loadGuests called with search:', searchValue.value)
 
@@ -159,12 +129,6 @@ const loadGuests = () => {
     if (searchValue.value && searchValue.value.length < 3) {
         console.log('⚠️ Search too short, showing warning')
         showWarning()
-        return
-    }
-
-    // Cegah multiple calls
-    if (isLoadingInternal.value) {
-        console.log('⏸️ Skip load - already loading')
         return
     }
 
@@ -193,7 +157,6 @@ const loadGuests = () => {
 // 🔹 Search handler
 const handleSearch = () => {
     currentPage.value = 0
-    isAutoSearching.value = false
     loadGuests()
 }
 
@@ -274,20 +237,22 @@ function onRowDblClick(e) {
 // 🔹 DataGrid events
 function onContentReady(e) {
     console.log('✅ DataGrid content ready')
-    // Jangan set isLoadingInternal ke false di sini karena kita kontrol via watch
+    isLoadingInternal.value = false
+
+    if (!dataGridInstance.value) {
+        dataGridInstance.value = e.component
+    }
 }
 
 function onOptionChanged(e) {
     if (e.fullName === 'paging.pageIndex') {
         console.log('📄 Page changed to:', e.value)
         currentPage.value = e.value
-        isAutoSearching.value = false
         loadGuests()
     } else if (e.fullName === 'paging.pageSize') {
         console.log('📏 Page size changed to:', e.value)
         pageSize.value = e.value
         currentPage.value = 0
-        isAutoSearching.value = false
         loadGuests()
     }
 }
@@ -399,19 +364,12 @@ const escapeRegex = (string) => {
                                         placeholder="Enter at least 3 characters to search..."
                                         :title="searchValue && searchValue.length < 3 ? 'Minimal 3 karakter diperlukan' : ''" />
                                     <button @click="handleSearch" 
-                                        :disabled="isLoading || isLoadingInternal"
-                                        :class="[
-                                            'px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2',
-                                            isLoading || isLoadingInternal
-                                                ? 'bg-gray-400 cursor-not-allowed'
-                                                : 'bg-indigo-500 hover:bg-indigo-600'
-                                        ]">
+                                        class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors flex items-center gap-2">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                         </svg>
-                                        <span v-if="isLoading || isLoadingInternal">Searching...</span>
-                                        <span v-else>Search</span>
+                                        Search
                                     </button>
                                 </div>
                                 <div class="w-1/6"></div>
@@ -487,37 +445,7 @@ const escapeRegex = (string) => {
                                     </div>
                                 </div>
 
-                                <!-- Loading State -->
-                                <div v-else-if="isLoading || isLoadingInternal" class="h-full flex flex-col items-center justify-center bg-gray-50 rounded-lg">
-                                    <div class="text-center">
-                                        <svg class="animate-spin w-16 h-16 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <h3 class="text-lg font-semibold text-gray-700 mb-2">
-                                            {{ isAutoSearching ? 'Auto-searching...' : 'Searching Guests...' }}
-                                        </h3>
-                                        <p class="text-gray-500">
-                                            Searching for "{{ searchValue }}"...
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- No Results State -->
-                                <div v-else-if="hasSearched && formattedGuests.length === 0" class="h-full flex flex-col items-center justify-center bg-gray-50 rounded-lg">
-                                    <div class="text-center">
-                                        <svg class="w-16 h-16 text-amber-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                        <h3 class="text-lg font-semibold text-gray-700 mb-2">No Guests Found</h3>
-                                        <p class="text-gray-500 max-w-md">
-                                            No guests found matching "{{ searchValue }}". 
-                                            Try adjusting your search criteria or search by different fields.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- Data Grid (hanya tampil setelah search dan loading selesai) -->
+                                <!-- Data Grid (hanya tampil setelah search) -->
                                 <div v-else class="h-full">
                                     <DxDataGrid 
                                         :data-source="dataGridDataSource" 
@@ -551,7 +479,7 @@ const escapeRegex = (string) => {
 
                                         <DxFilterRow :visible="true" />
 
-                                        <DxSearchPanel :visible="false" />
+                                        <DxSearchPanel :visible="false" /> <!-- Hide default search panel -->
 
                                         <DxLoadPanel :enabled="true" />
 
@@ -590,12 +518,28 @@ const escapeRegex = (string) => {
                                 </div>
                             </div>
 
+                            <!-- Loading Indicator -->
+                            <div v-if="isLoading || isLoadingInternal" class="mt-4 text-center">
+                                <div class="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg">
+                                    <svg class="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span class="text-sm font-medium">Loading guests...</span>
+                                </div>
+                            </div>
+
                             <!-- Search Info -->
-                            <div v-if="hasSearched && searchValue && searchValue.length >= 3 && !isLoading && !isLoadingInternal && formattedGuests.length > 0" class="mt-3 text-center">
+                            <div v-if="hasSearched && searchValue && searchValue.length >= 3" class="mt-3 text-center">
                                 <p class="text-sm text-gray-600">
-                                    Total: {{ totalCount }} guests found | 
-                                    Showing: {{ formattedGuests.length }} records | 
-                                    Page {{ currentPage + 1 }} of {{ Math.ceil(totalCount / pageSize) || 1 }}
+                                    <span v-if="formattedGuests.length > 0">
+                                        Total: {{ totalCount }} guests found | 
+                                        Showing: {{ formattedGuests.length }} records | 
+                                        Page {{ currentPage + 1 }} of {{ Math.ceil(totalCount / pageSize) || 1 }}
+                                    </span>
+                                    <span v-else class="text-amber-600">
+                                        No guests found matching your search criteria.
+                                    </span>
                                 </p>
                             </div>
                         </div>
@@ -605,12 +549,6 @@ const escapeRegex = (string) => {
                             <p class="text-sm text-gray-600 text-center">
                                 <span v-if="!hasSearched">
                                     💡 <strong>Tip:</strong> Enter at least 3 characters in the search box to find guests
-                                </span>
-                                <span v-else-if="isLoading || isLoadingInternal">
-                                    🔍 <strong>Searching:</strong> Please wait while we search for guests...
-                                </span>
-                                <span v-else-if="formattedGuests.length === 0">
-                                    💡 <strong>No Results:</strong> Try different search terms or check your search fields
                                 </span>
                                 <span v-else>
                                     💡 <strong>Tip:</strong> Double-click a row to select guest | 
