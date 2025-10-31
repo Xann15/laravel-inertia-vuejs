@@ -4,6 +4,8 @@ import { ref, inject, onMounted, watch, nextTick } from 'vue'
 
 const tabSystem = inject('tabSystem')
 
+const instanceId = ref(`walkin-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+
 const formData = ref({
     property: '',
     arrival: new Date().toISOString().split('T')[0],

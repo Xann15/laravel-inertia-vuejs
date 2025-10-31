@@ -1,8 +1,15 @@
 <!-- Components/ReservationForm.vue -->
 <script setup>
 import { ref, inject, onMounted, watch, nextTick } from 'vue'
+import GuestGridModal from './GuestGridModal.vue'
 
 const tabSystem = inject('tabSystem')
+
+// 🔹 Generate unique instance ID untuk setiap reservation form
+const instanceId = ref(`reservation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+
+// 🔹 State untuk Guest Modal
+const showGuestModal = ref(false)
 
 const formData = ref({
     property: '',
@@ -254,7 +261,7 @@ function closeReservation() {
     }
 }
 
-// Fungsi saveReservation (tetap sama)
+// Fungsi saveReservation
 function saveReservation() {
     console.log('=== RESERVATION FORM DATA ===')
     console.table({
@@ -321,6 +328,34 @@ function saveReservation() {
     console.log(JSON.parse(JSON.stringify(formData.value)))
 
     alert('Reservation data has been saved! Check console for details.')
+}
+
+// 🔹 Guest Modal Functions
+function openGuestModal() {
+    showGuestModal.value = true
+}
+
+function closeGuestModal() {
+    showGuestModal.value = false
+}
+
+function handleGuestSelected(guest) {
+    // Populate form dengan data guest yang dipilih
+    formData.value.title = guest.title
+    formData.value.firstName = guest.firstName
+    formData.value.lastName = guest.lastName
+    formData.value.phone = guest.phone
+    formData.value.email = guest.email
+    formData.value.city = guest.city
+    formData.value.address = guest.address || ''
+    formData.value.nationality = guest.nationality
+    formData.value.identityType = guest.idType
+    formData.value.identityNumber = guest.idNumber
+    formData.value.birthday = guest.birthday || new Date().toISOString().split('T')[0]
+    formData.value.guestType = guest.guestType || 'Individual'
+    formData.value.vip = guest.vip || ''
+    
+    console.log('✅ Guest selected and populated:', guest)
 }
 </script>
 
@@ -423,7 +458,7 @@ function saveReservation() {
                     <!-- Column 1: Profile - Compact -->
                     <div class="lg:col-span-5 p-4 border-r space-y-3">
                         <div class="grid grid-cols-12 gap-2">
-                            <div class="col-span-3">
+                            <div class="col-span-2">
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">TITLE</label>
                                 <select v-model="formData.title"
                                     class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-xs">
@@ -432,18 +467,20 @@ function saveReservation() {
                                     <option>Miss</option>
                                 </select>
                             </div>
-                            <div class="col-span-5">
+                            <div class="col-span-4">
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">FIRST NAME <span
                                         class="text-red-500">*</span></label>
                                 <input v-model="formData.firstName"
                                     class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
                             </div>
-                            <div class="col-span-4">
+                            <div class="col-span-6">
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">LAST NAME</label>
                                 <div class="flex gap-1">
                                     <input v-model="formData.lastName"
                                         class="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
-                                    <button class="px-2 bg-indigo-100 hover:bg-indigo-200 rounded text-xs">
+                                    <!-- 🔹 TOMBOL BUKA GUEST MODAL -->
+                                    <button @click="openGuestModal" type="button"
+                                        class="px-2 bg-indigo-100 hover:bg-indigo-200 rounded text-xs transition-colors">
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -682,7 +719,7 @@ function saveReservation() {
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-1">
+                        <div class="grid grid-cols-1 gap-1">
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">ROOM RATE</label>
                                 <input v-model="formData.roomRate" readonly
@@ -774,4 +811,11 @@ function saveReservation() {
 
         </div>
     </div>
+
+    <!-- 🔹 GUEST GRID MODAL COMPONENT -->
+    <GuestGridModal 
+        :show="showGuestModal" 
+        @close="closeGuestModal"
+        @select-guest="handleGuestSelected"
+    />
 </template>
