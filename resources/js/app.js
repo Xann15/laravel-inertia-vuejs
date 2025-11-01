@@ -15,6 +15,9 @@ import flatpickrDirective from './directives/flatpickr';
 // Import DevExtreme
 import 'devextreme/dist/css/dx.light.css';
 
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
+
 const appName = import.meta.env.VITE_APP_NAME || "FO Cloud 2026";
 
 createInertiaApp({

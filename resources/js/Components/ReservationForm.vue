@@ -4,6 +4,7 @@ import { ref, inject, onMounted, watch, nextTick } from 'vue'
 import { router } from '@inertiajs/vue3'
 import GuestGridModal from './GuestGridModal.vue'
 import CompanyGridModal from './CompanyGridModal.vue'
+import Swal from 'sweetalert2'
 
 import axios from 'axios'
 
@@ -419,22 +420,15 @@ const loadCompanies = async (params = {}) => {
 }
 
 async function openCompanyModal() {
-    companySearchQuery.value = formData.value.companyDisplay.trim()
-    console.log('🔹 Opening company modal with search:', companySearchQuery.value)
+   
     showCompanyModal.value = true
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    // Auto-load jika ada search query
-    if (companySearchQuery.value.length >= 3) {
-        console.log('🔹 Auto-loading companies with search:', companySearchQuery.value)
-        loadCompanies({
-            searchValue: companySearchQuery.value,
-            fields: 'CompanyName,CompID,Address,CompPhone',
-            skip: 0,
-            take: 20
-        })
-    }
+    
+    loadCompanies({
+        searchValue: '',
+        fields: 'CompanyName,CompID,Address,CompPhone',
+        skip: 0,
+        take: 20
+    })
 }
 
 function closeCompanyModal() {
@@ -445,8 +439,28 @@ function handleCompanySelected(company) {
     console.table(company)
 
     // Check credit facility
+    // Check credit facility dengan SweetAlert2 yang lebih menarik
     if (company.creditFacility === 0 || company.creditFacility === "0") {
-        alert('⚠️ NO CREDIT FACILITY\n\nThis company does not have credit facility approved.')
+        Swal.fire({
+            icon: 'error',
+            title: '<span style="color: #e53e3e">⚠️ NO CREDIT FACILITY</span>',
+            html: `
+                <div style="text-align: left; margin-top: 1rem;">
+                    <p style="margin-bottom: 0.5rem;"><strong>Company:</strong> ${company.CompName || 'N/A'}</p>
+                    <p style="margin-bottom: 0.5rem;"><strong>Status:</strong> Credit Facility Not Approved</p>
+                    <p style="margin-bottom: 0; color: #718096; font-size: 0.9rem;">
+                        This company cannot make transactions on credit.
+                    </p>
+                </div>
+            `,
+            confirmButtonText: 'I Understand',
+            confirmButtonColor: '#e53e3e',
+            showCancelButton: false,
+            customClass: {
+                popup: 'sweet-alert-popup',
+                title: 'sweet-alert-title'
+            }
+        })
     }
 
     formData.value.company = company.CompID || ''
@@ -711,7 +725,7 @@ function handleLoadCompanies(params) {
                             <div class="flex gap-1">
                                 <input v-model="formData.companyDisplay"
                                     class="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm"
-                                    placeholder="Search company..." />
+                                    placeholder="Search company..." disabled/>
                                 <button @click="openCompanyModal" type="button"
                                     class="px-3 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-xs transition-colors flex items-center">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

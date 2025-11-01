@@ -23,6 +23,7 @@
         "devextreme": "^23.2.3",
         "devextreme-dist": "^25.1.6",
         "devextreme-vue": "^23.2.3",
-        "flatpickr": "^4.6.13"
+        "flatpickr": "^4.6.13",
+        "sweetalert2": "^11.26.3"
     }
 }
