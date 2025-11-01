@@ -1,7 +1,7 @@
 <!-- Components/ReservationForm.vue - UPDATED -->
 <script setup>
-import { ref, inject, onMounted, watch, nextTick } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { ref, inject, onMounted, watch, nextTick, computed } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
 import GuestGridModal from './GuestGridModal.vue'
 import CompanyGridModal from './CompanyGridModal.vue'
 import Swal from 'sweetalert2'
@@ -9,6 +9,14 @@ import Swal from 'sweetalert2'
 import axios from 'axios'
 
 const tabSystem = inject('tabSystem')
+const page = usePage()
+
+// 🔹 Computed properties untuk auth data
+const authData = computed(() => page.props.auth)
+const properties = computed(() => authData.value?.property || [])
+const currentICNO = computed(() => authData.value?.ICNO || '')
+const currentHotelName = computed(() => authData.value?.hotelName || '')
+const selectedProperty = ref(currentICNO.value)
 
 // 🔹 State untuk Guest Modal
 const showGuestModal = ref(false)
@@ -480,6 +488,44 @@ function handleLoadCompanies(params) {
     }
     loadCompanies(params)
 }
+
+async function handlePropertyChange() {
+    if (!selectedProperty.value) return
+    
+    try {
+        const response = await axios.post('/change-property', {
+            ICNO: selectedProperty.value
+        })
+        
+        // Cek jika response sukses
+        if (response.data.success) {
+            // Reload halaman setelah ganti property
+            window.location.reload()
+        } else {
+            throw new Error(response.data.error || 'Failed to change property')
+        }
+        
+    } catch (error) {
+        console.error('❌ Error changing property:', error)
+        
+        // Reset ke property sebelumnya
+        selectedProperty.value = currentICNO.value
+        
+        Swal.fire({
+            icon: 'error',
+            title: 'Property Change Failed',
+            text: error.response?.data?.error || error.message || 'Failed to change property. Please try again.',
+            confirmButtonColor: '#3085d6',
+        })
+    }
+}
+
+// Watch untuk perubahan property - HANYA trigger jika berbeda
+watch(selectedProperty, (newValue, oldValue) => {
+    if (newValue && newValue !== oldValue && newValue !== currentICNO.value) {
+        handlePropertyChange()
+    }
+})
 </script>
 
 <template>
@@ -505,9 +551,18 @@ function handleLoadCompanies(params) {
                 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                     <div class="col-span-2 md:col-span-1">
                         <label class="block text-xs font-bold text-gray-600 mb-1">🏨 PROPERTY</label>
-                        <select v-model="formData.property"
-                            class="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 text-sm">
-                            <option>Select Property</option>
+                        <select 
+                            v-model="selectedProperty"
+                            class="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 text-sm"
+                            :disabled="isChangingProperty"
+                        >
+                            <option 
+                                v-for="property in properties" 
+                                :key="property.ICNO" 
+                                :value="property.ICNO"
+                            >
+                                {{ property.hotelName }}
+                            </option>
                         </select>
                     </div>
                     <div>

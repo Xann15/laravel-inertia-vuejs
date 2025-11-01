@@ -6,7 +6,6 @@ import DropdownLink from '@/Components/DropdownLink.vue'
 import NavLink from '@/Components/NavLink.vue'
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue'
 import { Link } from '@inertiajs/vue3'
-
 // Import komponen ReservationForm
 import ReservationForm from '@/Components/ReservationForm.vue'
 import ReservationGrid from '@/Components/ReservationGrid.vue'
@@ -68,7 +67,7 @@ provide('tabSystem', {
 // 🔹 Add new tab dengan support multiple instances
 function addTab(title, component, icon = '📄') {
   // Jika bukan ReservationForm, cek apakah sudah ada tab dengan component yang sama
-  if (component !== 'ReservationForm' && component  !== "WalkIn") {
+  if (component !== 'ReservationForm' && component !== "WalkIn") {
     const existing = tabs.value.find(t => t.component === component)
     if (existing) {
       activeTabId.value = existing.id
@@ -187,8 +186,8 @@ defineExpose({ addTab })
             </button>
 
             <Link :href="route('dashboard')" class="flex items-center gap-2">
-            <ApplicationLogo class="h-8 w-auto" />
-            <span class="text-xl font-bold text-gray-800">FO Cloud</span>
+            <ApplicationLogo size="medium" logo-text="Front Office Cloud" alt-text="FO Cloud Hotel System"
+              :show-text="true" />
             </Link>
           </div>
 
@@ -216,11 +215,8 @@ defineExpose({ addTab })
           <div class="flex items-center gap-4">
             <!-- Hotel Info -->
             <div class="hidden lg:block text-right">
-              <p class="text-sm font-bold text-red-600">{{ $page.props.hotelName || 'Hotel Name' }}</p>
-              <p class="text-xs text-gray-500">{{ new Date().toLocaleDateString('id-ID', {
-                day: '2-digit', month:
-                  'short', year: 'numeric'
-              }) }}</p>
+              <p class="text-sm font-bold text-red-600">{{ $page.props.auth.hotelName || 'Hotel Name' }}</p>
+              <p class="text-xs text-gray-500">{{ $page.props.auth.activeDate.short }}</p>
             </div>
 
             <!-- User Dropdown -->
@@ -229,7 +225,7 @@ defineExpose({ addTab })
                 <button class="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition">
                   <div
                     class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
-                    {{ $page.props.auth?.user?.name?.charAt(0) || 'U' }}
+                    {{ $page.props.auth.username.charAt(0) || 'U' }}
                   </div>
                   <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -238,7 +234,7 @@ defineExpose({ addTab })
               </template>
               <template #content>
                 <div class="px-4 py-3 border-b">
-                  <p class="text-sm font-medium text-gray-900">{{ $page.props.auth?.user?.name || 'Guest' }}</p>
+                  <p class="text-sm font-medium text-gray-900">{{ $page.props.auth.username || 'Guest' }}</p>
                   <p class="text-xs text-gray-500">{{ $page.props.auth?.user?.email || '' }}</p>
                 </div>
                 <DropdownLink :href="route('profile.edit')">

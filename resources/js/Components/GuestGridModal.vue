@@ -23,7 +23,7 @@ const props = defineProps({
     isLoading: {
         type: Boolean,
         default: false
-    }
+    },
 })
 
 const emit = defineEmits(['close', 'select-guest', 'load-guests'])
