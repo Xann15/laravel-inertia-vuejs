@@ -6,6 +6,8 @@ use Inertia\Inertia;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ReservationController;
+use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,7 +19,7 @@ use App\Http\Controllers\ReservationController;
 |
 */
 
-// Halaman utama (Welcome)
+// Halaman utama (Welcome) - Public
 Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin'      => Route::has('login'),
@@ -27,32 +29,52 @@ Route::get('/', function () {
     ]);
 });
 
-// Dashboard (hanya untuk user login & verified)
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->name('dashboard');
-// Route::get('/dashboard', function () {
-//     return Inertia::render('Dashboard');
-// })->middleware(['auth', 'verified'])->name('dashboard');
+// Auth Routes - Hanya untuk guest (belum login)
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login']);
+});
 
-// Grup route yang butuh autentikasi
-// Route::middleware(['auth'])->group(function () {
-// Profile routes (bawaan Breeze)
-Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+// Protected Routes - Hanya untuk user yang sudah login
+Route::middleware('auth.check')->group(function () {
+    
+    // Dashboard
+    Route::get('/dashboard', function () {
+        return Inertia::render('Dashboard');
+    })->name('dashboard');
 
-// 🔥 CRUD Post routes (pakai resource controller)
-Route::resource('posts', PostController::class);
+    // Profile routes
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Post routes
+    Route::resource('posts', PostController::class);
 
+    // Reservation API routes
+    Route::get('/api/reservations/guests', [ReservationController::class, 'getallguest']);
+    Route::get('/api/reservations/companies', [ReservationController::class, 'getallcompany']);
+    Route::get('/api/reservations/vip-list', [ReservationController::class, 'getVIPList']);
+    Route::get('/api/reservations/nationalities', [ReservationController::class, 'getNationality']);
 
+    // Property change route
+    Route::post('/change-property', [AuthController::class, 'changeproperty'])->name('change.property');
 
-Route::get('/api/reservations/guests', [ReservationController::class, 'getallguest']);
-Route::get('/api/reservations/companies', [ReservationController::class, 'getallcompany']);
-Route::get('/api/reservations/vip-list', [ReservationController::class, 'getVIPList']);
-Route::get('/api/reservations/nationalities', [ReservationController::class, 'getNationality']);
-// });
+    // Logout
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+});
 
-// Auth routes (login, register, forgot password, dsb)
-require __DIR__ . '/auth.php';
+// Test DB Connection - Public (untuk testing saja)
+Route::get('/test-db', function () {
+    try {
+        $connection = DB::connection()->getPdo();
+        return "✅ Database connected: " . DB::connection()->getDatabaseName();
+    } catch (\Exception $e) {
+        return "❌ Connection failed: " . $e->getMessage();
+    }
+});
+
+// Debug Session - Public (untuk development saja)
+Route::get('/debug-session', function () {
+    dd(session()->all());
+});
