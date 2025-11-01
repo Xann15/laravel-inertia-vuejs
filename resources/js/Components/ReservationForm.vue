@@ -1,8 +1,10 @@
-<!-- Components/ReservationForm.vue -->
+<!-- Components/ReservationForm.vue - UPDATED -->
 <script setup>
 import { ref, inject, onMounted, watch, nextTick } from 'vue'
 import { router } from '@inertiajs/vue3'
 import GuestGridModal from './GuestGridModal.vue'
+import CompanyGridModal from './CompanyGridModal.vue'
+
 import axios from 'axios'
 
 const tabSystem = inject('tabSystem')
@@ -12,10 +14,17 @@ const showGuestModal = ref(false)
 const guests = ref([])
 const totalGuestCount = ref(0)
 const isLoadingGuests = ref(false)
-const searchQuery = ref('')
-const form = ref({ firstName: '' })
 
-// 🔹 Generate unique instance ID untuk setiap reservation form
+// 🔹 State untuk Company Modal
+const showCompanyModal = ref(false)
+const companies = ref([])
+const totalCompaniesCount = ref(0)
+const isLoadingCompanies = ref(false)
+
+const searchQuery = ref('')
+const companySearchQuery = ref('')
+
+// Generate unique instance ID
 const instanceId = ref(`reservation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
 
 const formData = ref({
@@ -27,6 +36,7 @@ const formData = ref({
     adult: 2, child: 0, infant: 0, vip: '', birthday: new Date().toISOString().split('T')[0],
     guestType: '', city: '', address: '', identityType: '', identityNumber: '000000',
     phone: '', email: '', nationality: '', bookingID: '', language: '', company: '',
+    companyDisplay: '', // Untuk display company name
     segment: '', subSegment: '', origin: 'JKT', destination: 'JKT', source: '',
     creditLimit: '', voucherNo: '', isWaitingList: false, roomType: '', roomNumber: '',
     currency: 'IDR', rate: '', roomRate: '', lateCheckOut: '', lateCOEnabled: false,
@@ -59,19 +69,17 @@ const departureOptions = ref({
     minDate: getNextDay(formData.value.arrival),
 })
 
-// Helper: tambah hari dari tanggal tertentu
+// Helper functions
 function addDays(dateString, days) {
     const d = new Date(dateString)
     d.setDate(d.getDate() + days)
     return d.toISOString().split('T')[0]
 }
 
-// Helper: tambah 1 hari dari tanggal tertentu
 function getNextDay(dateString) {
     return addDays(dateString, 1)
 }
 
-// 🔹 Hitung selisih hari dengan cara yang lebih akurat
 function calculateNights(arrivalDate, departureDate) {
     const arrival = new Date(arrivalDate)
     const departure = new Date(departureDate)
@@ -82,124 +90,69 @@ function calculateNights(arrivalDate, departureDate) {
     return Math.max(1, Math.floor(diffDays))
 }
 
-// 🔹 Ketika Arrival berubah - UPDATE NIGHTS BERDASARKAN DEPARTURE (DEPARTURE TETAP)
 function handleArrivalChange(selectedDates) {
     if (!selectedDates[0] || isInitializing.value) return
-
     const arrivalDate = selectedDates[0].toISOString().split('T')[0]
     formData.value.arrival = arrivalDate
-
-    // Update minDate untuk departure picker
     const nextDay = getNextDay(arrivalDate)
     if (departurePicker.value) {
         departurePicker.value.set('minDate', nextDay)
     }
-
-    // Hitung nights berdasarkan selisih arrival baru dan departure yang tetap
     const nights = calculateNights(arrivalDate, formData.value.departure)
-
-    // Update nights
     formData.value.nights = nights
     nightsDisplay.value = nights
-
-    // Jika arrival baru >= departure yang ada, set departure ke next day dari arrival
     if (nights < 1) {
         const newDeparture = getNextDay(arrivalDate)
         formData.value.departure = newDeparture
         formData.value.nights = 1
         nightsDisplay.value = 1
-
         if (departurePicker.value) {
             departurePicker.value.setDate(newDeparture)
         }
     }
-
-    console.log('Arrival changed:', {
-        arrival: arrivalDate,
-        departure: formData.value.departure,
-        nights: formData.value.nights
-    })
 }
 
-// 🔹 Ketika Departure berubah - UPDATE NIGHTS BERDASARKAN SELISIH
 function handleDepartureChange(selectedDates) {
     if (!selectedDates[0] || isInitializing.value) return
-
     const departureDate = selectedDates[0].toISOString().split('T')[0]
     const arrivalDate = formData.value.arrival
-
-    // Hitung nights berdasarkan selisih
     const nights = calculateNights(arrivalDate, departureDate)
-
-    // Update nights
     formData.value.nights = nights
     nightsDisplay.value = nights
     formData.value.departure = departureDate
-
-    console.log('Departure changed:', {
-        arrival: arrivalDate,
-        departure: departureDate,
-        nights: nights
-    })
 }
 
-// 🔹 Tombol + / - untuk nights - UPDATE DEPARTURE BERDASARKAN NIGHTS
 function changeNights(delta) {
     let nights = parseInt(formData.value.nights) || 1
     nights = Math.max(1, nights + delta)
     formData.value.nights = nights
     nightsDisplay.value = nights
-
-    // Update departure berdasarkan nights baru
     const newDeparture = addDays(formData.value.arrival, nights)
     formData.value.departure = newDeparture
-
-    // Update departure picker
     if (departurePicker.value) {
         departurePicker.value.setDate(newDeparture)
     }
-
-    console.log('Nights changed:', {
-        arrival: formData.value.arrival,
-        nights: nights,
-        departure: newDeparture
-    })
 }
 
-// 🔹 Saat user selesai mengetik manual di nights - UPDATE DEPARTURE
 function handleNightsBlur() {
     let nights = parseInt(nightsDisplay.value) || 0
-
     if (nights < 1) {
         nights = 1
         nightsDisplay.value = "1"
     }
-
     formData.value.nights = nights
-
-    // Update departure berdasarkan nights baru
     const newDeparture = addDays(formData.value.arrival, nights)
     formData.value.departure = newDeparture
-
-    // Update departure picker
     if (departurePicker.value) {
         departurePicker.value.setDate(newDeparture)
     }
-
-    console.log('Nights manual input:', {
-        arrival: formData.value.arrival,
-        nights: nights,
-        departure: newDeparture
-    })
 }
 
-// 🔹 Filter input hanya angka
 function handleNightsInput(event) {
     const raw = event.target.value.replace(/\D/g, "")
     nightsDisplay.value = raw
 }
 
-// 🔹 Handler untuk FirstName input - DIPERBAIKI: Validasi ketat 3 karakter
 const handleFirstNameEnter = (e) => {
     e.preventDefault()
     if (formData.value.firstName.trim().length >= 3) {
@@ -216,13 +169,11 @@ const handleFirstNameTab = (e) => {
     }
 }
 
-// Custom directive untuk flatpickr dengan instance reference
+// Custom directive untuk flatpickr
 const vFlatpickrInstance = {
     mounted(el, binding) {
         import('flatpickr').then(module => {
             const flatpickr = module.default
-
-            // Buat instance flatpickr
             const instance = flatpickr(el, {
                 ...binding.value,
                 onChange: function (selectedDates) {
@@ -233,21 +184,15 @@ const vFlatpickrInstance = {
                     }
                 }
             })
-
-            // Simpan instance berdasarkan arg setelah flatpickr siap
             if (binding.arg === 'arrival') {
                 arrivalPicker.value = instance
             } else if (binding.arg === 'departure') {
                 departurePicker.value = instance
             }
-
-            // Setelah semua flatpickr siap, nonaktifkan initializing
             nextTick(() => {
                 if (arrivalPicker.value && departurePicker.value) {
-                    // Tunggu sedikit untuk memastikan flatpickr benar-benar siap
                     setTimeout(() => {
                         isInitializing.value = false
-                        console.log('All flatpickr instances ready - initializing disabled')
                     }, 100)
                 }
             })
@@ -260,21 +205,12 @@ const vFlatpickrInstance = {
     }
 }
 
-// Watch untuk sinkronisasi nightsDisplay dengan formData.nights
 watch(() => formData.value.nights, (newNights) => {
     nightsDisplay.value = newNights
 })
 
-// Inisialisasi
 onMounted(() => {
-    // Set initial nights display saja
     nightsDisplay.value = formData.value.nights
-
-    console.log('Component mounted with initial values:', {
-        arrival: formData.value.arrival,
-        departure: formData.value.departure,
-        nights: formData.value.nights
-    })
 })
 
 const showMore = ref(false)
@@ -285,11 +221,9 @@ function closeReservation() {
     }
 }
 
-// Fungsi saveReservation
 function saveReservation() {
     console.log('=== RESERVATION FORM DATA ===')
     console.table({
-        // Property & Dates
         'Property': formData.value.property,
         'Arrival': formData.value.arrival,
         'Nights': formData.value.nights,
@@ -297,8 +231,6 @@ function saveReservation() {
         'Folio': formData.value.folio,
         'Folio Group': formData.value.folioGroup,
         'Status': formData.value.status,
-
-        // Guest Profile
         'Title': formData.value.title,
         'First Name': formData.value.firstName,
         'Last Name': formData.value.lastName,
@@ -315,11 +247,10 @@ function saveReservation() {
         'Phone': formData.value.phone,
         'Email': formData.value.email,
         'Nationality': formData.value.nationality,
-
-        // Additional Info
         'Booking ID': formData.value.bookingID,
         'Language': formData.value.language,
         'Company': formData.value.company,
+        'Company Display': formData.value.companyDisplay,
         'Segment': formData.value.segment,
         'Sub Segment': formData.value.subSegment,
         'Origin': formData.value.origin,
@@ -328,8 +259,6 @@ function saveReservation() {
         'Credit Limit': formData.value.creditLimit,
         'Voucher No': formData.value.voucherNo,
         'Waiting List': formData.value.isWaitingList ? 'Yes' : 'No',
-
-        // Room & Rate
         'Room Type': formData.value.roomType,
         'Room Number': formData.value.roomNumber,
         'Currency': formData.value.currency,
@@ -341,43 +270,31 @@ function saveReservation() {
         'Extra Bed Amount': formData.value.extraBedAmount,
         'Company Rate': formData.value.companyRate,
         'Pre-Posting Rate': formData.value.prePostingRate,
-
-        // Remarks
         'Cashier Remark': formData.value.cashierRemark,
         'Reception Remark': formData.value.receptionRemark,
         'Outlet Remark': formData.value.outletRemark
     })
-
-    console.log('=== FULL FORM DATA OBJECT ===')
-    console.log(JSON.parse(JSON.stringify(formData.value)))
-
     alert('Reservation data has been saved! Check console for details.')
 }
 
-// 🔹 PERBAIKAN: Load guests dengan validasi ketat
+// 🔹 GUEST FUNCTIONS
 const loadGuests = async (params = {}) => {
-    // Validasi: hanya load jika search query >= 3 karakter atau tidak ada search
     if (params.searchValue && params.searchValue.trim().length < 3) {
         console.log('❌ Search query too short, skipping load:', params.searchValue)
         guests.value = []
         totalGuestCount.value = 0
         return
     }
-
     isLoadingGuests.value = true
-
     try {
         const response = await axios.get('/api/reservations/guests', { params })
         guests.value = response.data.data || []
         totalGuestCount.value = response.data.totalCount || 0
-
         console.log('✅ Guests loaded:', {
             params: params,
             totalCount: totalGuestCount.value,
-            guestsCount: guests.value.length,
-            guests: guests.value
+            guestsCount: guests.value.length
         })
-
         await new Promise(resolve => setTimeout(resolve, 300))
     } catch (error) {
         console.error('❌ Error loading guests:', error)
@@ -388,79 +305,166 @@ const loadGuests = async (params = {}) => {
     }
 }
 
-// 🔹 PERBAIKAN: Fungsi buka modal dengan validasi ketat
-// 🔹 PERBAIKAN: Fungsi buka modal dengan validasi ketat
 async function openGuestModal() {
-    // Validasi: hanya buka modal jika firstName >= 3 karakter
-    // if (formData.value.firstName.trim().length < 3) {
-    //     console.log('❌ First name too short, cannot open modal:', formData.value.firstName)
-    //     alert('Please enter at least 3 characters in First Name to search for guests.')
-    //     return
-    // }
-
-    // Simpan search query dari firstName
     searchQuery.value = formData.value.firstName.trim()
-
     console.log('🔹 Opening guest modal with search:', searchQuery.value)
-
     showGuestModal.value = true
-
-    // Tunggu modal terbuka sepenuhnya
     await nextTick()
     await new Promise(resolve => setTimeout(resolve, 100))
-
-    // Load data dengan search query yang sudah divalidasi
     console.log('🔹 Auto-loading with search:', searchQuery.value)
     loadGuests({
         searchValue: searchQuery.value,
         fields: 'GuestName,Phone,Email,TypeIDNumber,clientID',
         skip: 0,
-        take: 20 // Sesuaikan dengan pageSize di modal
+        take: 20
     })
 }
 
 function closeGuestModal() {
     showGuestModal.value = false
-    // Jangan reset searchQuery di sini agar tetap tersimpan untuk下次buka
 }
 
 function handleGuestSelected(guest) {
-    console.table(guest);
-    // Populate form dengan data guest yang dipilih
+    console.table(guest)
     if (guest.guestName) {
         const names = guest.guestName.split(" ")
         formData.value.firstName = names[0]
         formData.value.lastName = names.slice(1).join(" ") || ""
     }
     formData.value.title = guest.title || 'Mr'
-    formData.value.phone = guest.phone || ''
-    formData.value.email = guest.email || ''
-    formData.value.city = guest.city || ''
-    formData.value.address = guest.address || ''
+    formData.value.phone = guest.Phone || ''
+    formData.value.email = guest.Email || ''
+    formData.value.city = guest.City || ''
+    formData.value.address = guest.Address || ''
     formData.value.nationality = guest.nationality || 'Indonesia'
     formData.value.identityType = guest.idType || 'KTP'
     formData.value.identityNumber = guest.idNumber || ''
     formData.value.birthday = guest.birthDate || new Date().toISOString().split('T')[0]
     formData.value.guestType = guest.guestType || 'Individual'
     formData.value.vip = guest.vip || ''
-
+    formData.value.language = guest.Language || ''
     console.log('✅ Guest selected and populated:', guest)
     closeGuestModal()
 }
 
-// 🔹 PERBAIKAN: Handle load-guests event dari modal dengan validasi ketat
 function handleLoadGuests(params) {
     console.log('🔄 handleLoadGuests called with params:', params)
-    
-    // Validasi: hanya load jika search query >= 3 karakter atau tidak ada search
     if (params.searchValue && params.searchValue.trim().length < 3) {
         console.log('❌ Search query too short, skipping load:', params.searchValue)
         guests.value = []
         totalGuestCount.value = 0
         return
     }
-    
     loadGuests(params)
+}
+
+// 🔹 COMPANY FUNCTIONS
+const loadCompanies = async (params = {}) => {
+    if (params.searchValue && params.searchValue.trim().length < 3) {
+        console.log('❌ Company search query too short, skipping load:', params.searchValue)
+        companies.value = []
+        totalCompaniesCount.value = 0
+        return
+    }
+    isLoadingCompanies.value = true
+    try {
+        // 🔹 PERBAIKAN: Pastikan parameter sesuai dengan backend
+        const requestParams = {
+            skip: params.skip || 0,
+            take: params.take || 20,
+        }
+
+        // Add search value
+        if (params.searchValue && params.searchValue.trim().length >= 3) {
+            requestParams.searchValue = params.searchValue.trim()
+        }
+
+        // 🔹 PERBAIKAN: Ubah 'fields' menjadi 'searchFields' sesuai backend
+        if (params.searchFields) {
+            requestParams.searchFields = params.searchFields
+        } else if (params.fields) {
+            // Fallback jika ada yang kirim 'fields'
+            requestParams.searchFields = params.fields
+        }
+
+        console.log('📤 Loading companies with params:', requestParams)
+
+        const response = await axios.get('/api/reservations/companies', {
+            params: requestParams
+        })
+
+        companies.value = response.data.data || []
+        totalCompaniesCount.value = response.data.totalCount || 0
+
+        console.log('✅ Companies loaded:', {
+            requestParams: requestParams,
+            totalCount: totalCompaniesCount.value,
+            companiesCount: companies.value.length,
+            sampleData: companies.value.slice(0, 2)
+        })
+
+        await new Promise(resolve => setTimeout(resolve, 300))
+    } catch (error) {
+        console.error('❌ Error loading companies:', error)
+        console.error('Error details:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+        })
+        companies.value = []
+        totalCompaniesCount.value = 0
+    } finally {
+        isLoadingCompanies.value = false
+    }
+}
+
+async function openCompanyModal() {
+    companySearchQuery.value = formData.value.companyDisplay.trim()
+    console.log('🔹 Opening company modal with search:', companySearchQuery.value)
+    showCompanyModal.value = true
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Auto-load jika ada search query
+    if (companySearchQuery.value.length >= 3) {
+        console.log('🔹 Auto-loading companies with search:', companySearchQuery.value)
+        loadCompanies({
+            searchValue: companySearchQuery.value,
+            fields: 'CompanyName,CompID,Address,CompPhone',
+            skip: 0,
+            take: 20
+        })
+    }
+}
+
+function closeCompanyModal() {
+    showCompanyModal.value = false
+}
+
+function handleCompanySelected(company) {
+    console.table(company)
+
+    // Check credit facility
+    if (company.creditFacility === 0 || company.creditFacility === "0") {
+        alert('⚠️ NO CREDIT FACILITY\n\nThis company does not have credit facility approved.')
+    }
+
+    formData.value.company = company.CompID || ''
+    formData.value.companyDisplay = `${company.CompName || ''} -- ${company.cGroupName || ''}`
+
+    console.log('✅ Company selected and populated:', company)
+    closeCompanyModal()
+}
+
+function handleLoadCompanies(params) {
+    console.log('🔄 handleLoadCompanies called with params:', params)
+    if (params.searchValue && params.searchValue.trim().length < 3) {
+        console.log('❌ Company search query too short, skipping load:', params.searchValue)
+        companies.value = []
+        totalCompaniesCount.value = 0
+        return
+    }
+    loadCompanies(params)
 }
 </script>
 
@@ -583,7 +587,6 @@ function handleLoadGuests(params) {
                                 <div class="flex gap-1">
                                     <input v-model="formData.lastName"
                                         class="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
-                                    <!-- 🔹 TOMBOL BUKA GUEST MODAL - DIPERBAIKI DENGAN VALIDASI -->
                                     <button @click="openGuestModal" type="button"
                                         class="px-3 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-xs transition-colors flex items-center">
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -704,11 +707,13 @@ function handleLoadGuests(params) {
                                 class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
                         </div>
                         <div>
-                            <label class="text-xs font-bold text-gray-600 mb-1 block">COMPANY</label>
+                            <label class="text-xs font-bold text-gray-600 mb-1 block">🏢 COMPANY</label>
                             <div class="flex gap-1">
-                                <input v-model="formData.company" readonly
-                                    class="flex-1 px-2 py-1 border border-gray-300 rounded bg-gray-50 text-sm" />
-                                <button class="px-2 bg-indigo-100 hover:bg-indigo-200 rounded text-xs">
+                                <input v-model="formData.companyDisplay"
+                                    class="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm"
+                                    placeholder="Search company..." />
+                                <button @click="openCompanyModal" type="button"
+                                    class="px-3 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-xs transition-colors flex items-center">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -916,15 +921,14 @@ function handleLoadGuests(params) {
 
         </div>
 
-        <!-- 🔹 GUEST GRID MODAL COMPONENT - DIPERBAIKI -->
-        <GuestGridModal 
-            :show="showGuestModal" 
-            :guests="guests" 
-            :total-count="totalGuestCount"
-            :initial-search-value="searchQuery" 
-            :is-loading="isLoadingGuests"
-            @close="closeGuestModal" 
-            @select-guest="handleGuestSelected" 
-            @load-guests="handleLoadGuests" />
+        <!-- 🔹 GUEST GRID MODAL -->
+        <GuestGridModal :show="showGuestModal" :guests="guests" :total-count="totalGuestCount"
+            :initial-search-value="searchQuery" :is-loading="isLoadingGuests" @close="closeGuestModal"
+            @select-guest="handleGuestSelected" @load-guests="handleLoadGuests" />
+
+        <!-- 🔹 COMPANY GRID MODAL -->
+        <CompanyGridModal :show="showCompanyModal" :companies="companies" :total-count="totalCompaniesCount"
+            :initial-search-value="companySearchQuery" :is-loading="isLoadingCompanies" @close="closeCompanyModal"
+            @select-company="handleCompanySelected" @load-companies="handleLoadCompanies" />
     </div>
 </template>
