@@ -43,6 +43,11 @@ function closeAddGuestModal() {
     showAddGuestModal.value = false
 }
 
+function handleGuestAdded(newGuest) {   
+  // Logic untuk handle guest yang baru ditambahkan
+  console.log('New guest added:', newGuest)
+}
+
 // Search state
 const searchValue = ref('')
 const selectedFields = ref(['GuestName']) // Default checked: GuestName

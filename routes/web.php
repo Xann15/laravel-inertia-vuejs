@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PostController;
-use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\FieldController;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\AuthController;
 
@@ -37,7 +37,7 @@ Route::middleware('guest')->group(function () {
 
 // Protected Routes - Hanya untuk user yang sudah login
 Route::middleware('auth.check')->group(function () {
-    
+
     // Dashboard
     Route::get('/dashboard', function () {
         return Inertia::render('Dashboard');
@@ -51,11 +51,25 @@ Route::middleware('auth.check')->group(function () {
     // Post routes
     Route::resource('posts', PostController::class);
 
-    // Reservation API routes
-    Route::get('/api/reservations/guests', [ReservationController::class, 'getallguest']);
-    Route::get('/api/reservations/companies', [ReservationController::class, 'getallcompany']);
-    Route::get('/api/reservations/vip-list', [ReservationController::class, 'getVIPList']);
-    Route::get('/api/reservations/nationalities', [ReservationController::class, 'getNationality']);
+    // Fields API routes
+    Route::prefix('api')->group(function () {
+        Route::prefix('fields')->group(function () {
+            Route::get('/guests', [FieldController::class, 'getAllGuest']);
+            Route::get('/companies', [FieldController::class, 'getAllCompany']);
+            Route::get('/vip-list', [FieldController::class, 'getVIPList']);
+            Route::get('/nationalities', [FieldController::class, 'getNationality']);
+            Route::get('/guest-type-list', [FieldController::class, 'getGuestTypeList']);
+            Route::get('/citys', [FieldController::class, 'getAllCity']);
+            Route::get('/identity', [FieldController::class, 'getAllTypeID']);
+            Route::get('/segments', [FieldController::class, 'getAllSegment']);
+            Route::get('/business-sources', [FieldController::class, 'getBusinessSourceBySegment']);
+            Route::get('/segment-subsegment-map', [FieldController::class, 'getSegmentSubSegmentMap']);
+        });
+
+
+        Route::get('/default-settings', [FieldController::class, 'getDefaultSettings']);
+        Route::get('/default-trans', [FieldController::class, 'getDefaultTrans']);
+    });
 
     // Property change route
     Route::post('/change-property', [AuthController::class, 'changeproperty'])->name('change.property');

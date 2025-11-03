@@ -6,6 +6,7 @@ import { resolvePageComponent } from "laravel-vite-plugin/inertia-helpers";
 import { createApp, h } from "vue";
 import { ZiggyVue } from "../../vendor/tightenco/ziggy";
 
+
 // Import flatpickr styles
 import "flatpickr/dist/flatpickr.css";
 
@@ -17,6 +18,8 @@ import 'devextreme/dist/css/dx.light.css';
 
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
+
+import 'vue-multiselect/dist/vue-multiselect.min.css'
 
 const appName = import.meta.env.VITE_APP_NAME || "FO Cloud 2027";
 

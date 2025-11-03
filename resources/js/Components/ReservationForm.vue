@@ -1,11 +1,10 @@
-<!-- Components/ReservationForm.vue - UPDATED -->
 <script setup>
 import { ref, inject, onMounted, watch, nextTick, computed } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import GuestGridModal from './GuestGridModal.vue'
 import CompanyGridModal from './CompanyGridModal.vue'
 import Swal from 'sweetalert2'
-
+import SelectField from '@/Components/SelectField.vue'
 import axios from 'axios'
 
 const tabSystem = inject('tabSystem')
@@ -30,6 +29,23 @@ const companies = ref([])
 const totalCompaniesCount = ref(0)
 const isLoadingCompanies = ref(false)
 
+// 🔹 State untuk Property
+const isChangingProperty = ref(false)
+
+// 🔹 State untuk Segment, Sub Segment, dan Business Source
+const segmentSubSegmentMap = ref({})
+const segments = ref([])
+const subSegments = ref([]) // Untuk sub-segment (dari tblsegmentsub)
+const businessSources = ref([]) // Untuk business source (dari tblbusinesssource)
+const isLoadingBusinessSources = ref(false)
+
+// 🔹 State untuk default transaction
+const defaultTrans = ref({})
+const isLoadingDefaults = ref(false)
+
+// 🔹 State untuk tracking loading progress
+const isDataLoaded = ref(false)
+
 const searchQuery = ref('')
 const companySearchQuery = ref('')
 
@@ -43,14 +59,15 @@ const formData = ref({
     departure: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     folio: '', folioGroup: '', status: '', title: 'Mr', firstName: '', lastName: '',
     adult: 2, child: 0, infant: 0, vip: '', birthday: new Date().toISOString().split('T')[0],
-    guestType: '', city: '', address: '', identityType: '', identityNumber: '000000',
-    phone: '', email: '', nationality: '', bookingID: '', language: '', company: '',
-    companyDisplay: '', // Untuk display company name
-    segment: '', subSegment: '', origin: 'JKT', destination: 'JKT', source: '',
+    guestType: 1, city: '', address: '', identityType: 1, identityNumber: '000000',
+    phone: '', email: '', nationality: null, bookingID: '', language: '', company: '',
+    companyDisplay: '',
+    segment: '', // 🔥 AKAN DIISI OTOMATIS DARI DEFAULT TRANS
+    subSegment: '', source: '', origin: 'JKT', destination: 'JKT',
     creditLimit: '', voucherNo: '', isWaitingList: false, roomType: '', roomNumber: '',
     currency: 'IDR', rate: '', roomRate: '', lateCheckOut: '', lateCOEnabled: false,
     extraBed: false, extraBedAmount: '', companyRate: '', prePostingRate: '',
-    cashierRemark: '', receptionRemark: '', outletRemark: ''
+    cashierRemark: '', receptionRemark: '', outletRemark: '',
 })
 
 // Ref untuk input nights dan flatpickr instances
@@ -218,7 +235,275 @@ watch(() => formData.value.nights, (newNights) => {
     nightsDisplay.value = newNights
 })
 
-onMounted(() => {
+// 🔹 WATCHERS - HANYA aktif setelah data terload
+watch(() => formData.value.segment, async (newSegmentId, oldSegmentId) => {
+    if (!isDataLoaded.value) return // 🔥 JANGAN proses jika data belum siap
+    
+    console.log('🔄 Segment changed from', oldSegmentId, 'to:', newSegmentId)
+
+    if (newSegmentId) {
+        // Update sub-segment options (sync)
+        updateSubSegmentOptions(newSegmentId)
+        
+        // Update business source options (async) - tambah small delay
+        await new Promise(resolve => setTimeout(resolve, 50))
+        await updateBusinessSourceOptions(newSegmentId)
+        
+        // 🔥 APPLY DEFAULT SOURCE setelah business sources terload
+        await applyDefaultSource()
+        
+        console.log('🎯 Final values after segment change:', {
+            segment: newSegmentId,
+            subSegment: formData.value.subSegment,
+            source: formData.value.source
+        })
+    } else {
+        subSegments.value = []
+        businessSources.value = []
+        formData.value.subSegment = null
+        formData.value.source = null
+    }
+})
+
+// 🔹 FUNCTIONS - DEFAULT TRANSACTION
+const loadDefaultTrans = async () => {
+    isLoadingDefaults.value = true
+    try {
+        const response = await axios.get('/api/default-trans')
+        const data = response.data
+        
+        // Convert array ke object untuk mudah diakses
+        const defaults = {}
+        data.forEach(item => {
+            defaults[item.colType] = item
+        })
+        
+        defaultTrans.value = defaults
+        console.log('✅ Default Transaction loaded:', defaults)
+        
+        // 🔥 APPLY DEFAULT VALUES KE formData
+        applyDefaultValues(defaults)
+        
+    } catch (error) {
+        console.error('❌ Error loading default transaction:', error)
+    } finally {
+        isLoadingDefaults.value = false
+    }
+}
+
+const applyDefaultValues = (defaults) => {
+    if (!defaults) return
+    
+    // Ambil nilai dari kolom "Reservation"
+    if (defaults.Segment && defaults.Segment.Reservation) {
+        formData.value.segment = parseInt(defaults.Segment.Reservation) || ''
+        console.log('🎯 Applied default Segment:', formData.value.segment)
+    }
+    
+    if (defaults.GuestType && defaults.GuestType.Reservation) {
+        formData.value.guestType = parseInt(defaults.GuestType.Reservation) || 1
+    }
+    
+    if (defaults.Country && defaults.Country.Reservation) {
+        formData.value.nationality = parseInt(defaults.Country.Reservation) || null
+    }
+    
+    if (defaults.DefPax && defaults.DefPax.Reservation) {
+        formData.value.adult = parseInt(defaults.DefPax.Reservation) || 2
+    }
+    
+    if (defaults.DefIDNo && defaults.DefIDNo.Reservation) {
+        formData.value.identityNumber = defaults.DefIDNo.Reservation || '000000'
+    }
+    
+    if (defaults.DefPhone && defaults.DefPhone.Reservation) {
+        formData.value.phone = defaults.DefPhone.Reservation || '000000'
+    }
+    
+    if (defaults.OriCity && defaults.OriCity.Reservation) {
+        formData.value.origin = defaults.OriCity.Reservation || 'JKT'
+    }
+    
+    if (defaults.DestCity && defaults.DestCity.Reservation) {
+        formData.value.destination = defaults.DestCity.Reservation || 'JKT'
+    }
+    
+    if (defaults.DefSource && defaults.DefSource.Reservation) {
+        console.log('🔧 Default Source available:', defaults.DefSource.Reservation)
+    }
+    
+    console.log('✅ Applied all default values for Reservation')
+}
+
+// 🔹 NEW FUNCTION untuk apply default source
+const applyDefaultSource = async () => {
+    if (!defaultTrans.value.DefSource || !defaultTrans.value.DefSource.Reservation) {
+        return
+    }
+    
+    const defaultSourceId = parseInt(defaultTrans.value.DefSource.Reservation)
+    if (!defaultSourceId) return
+    
+    // Tunggu sampai business sources terload
+    await new Promise(resolve => {
+        const checkSources = () => {
+            if (businessSources.value.length > 0) {
+                resolve()
+            } else {
+                setTimeout(checkSources, 100)
+            }
+        }
+        checkSources()
+    })
+    
+    // Cari default source di business sources
+    const defaultSource = businessSources.value.find(source => 
+        source.busID === defaultSourceId
+    )
+    
+    if (defaultSource) {
+        formData.value.source = defaultSourceId
+        console.log('✅ Applied default Business Source:', defaultSource.busRemark, 'ID:', defaultSourceId)
+    } else {
+        console.log('⚠️ Default source not found in available sources:', defaultSourceId)
+    }
+}
+
+// 🔹 FUNCTIONS - SEGMENT & SUB SEGMENT
+const loadSegmentSubSegmentMap = async () => {
+    try {
+        const response = await axios.get('/api/fields/segment-subsegment-map')
+        segmentSubSegmentMap.value = response.data
+        console.log('✅ Segment-SubSegment Map loaded:', segmentSubSegmentMap.value)
+        return true
+    } catch (error) {
+        console.error('❌ Error loading segment-subsegment map:', error)
+        segmentSubSegmentMap.value = {}
+        return false
+    }
+}
+
+const updateSubSegmentOptions = (segmentID) => {
+    const subSegmentData = segmentSubSegmentMap.value[segmentID] || []
+
+    console.log('🔄 Updating SUB-SEGMENT options for segment:', segmentID, 'data:', subSegmentData)
+
+    subSegments.value = subSegmentData
+
+    // Auto-select sub-segment pertama jika ada
+    if (subSegmentData.length > 0) {
+        formData.value.subSegment = subSegmentData[0].subID
+        console.log('✅ Auto-selected SUB-SEGMENT:', subSegmentData[0].subName, 'ID:', subSegmentData[0].subID)
+    } else {
+        formData.value.subSegment = null
+        console.log('⚠️ No sub-segments available for segment:', segmentID)
+    }
+}
+
+const updateBusinessSourceOptions = async (segmentID) => {
+    if (!segmentID) {
+        businessSources.value = []
+        formData.value.source = null
+        return
+    }
+
+    isLoadingBusinessSources.value = true
+    try {
+        const response = await axios.get('/api/fields/business-sources', {
+            params: { segment_id: segmentID }
+        })
+
+        businessSources.value = response.data
+        console.log('✅ BUSINESS SOURCES loaded for segment', segmentID, ':', businessSources.value)
+
+        // Auto-select business source pertama jika ada
+        if (businessSources.value.length > 0) {
+            formData.value.source = businessSources.value[0].busID
+            console.log('✅ Auto-selected BUSINESS SOURCE:', businessSources.value[0].busRemark, 'ID:', businessSources.value[0].busID)
+        } else {
+            formData.value.source = null
+            console.log('⚠️ No business sources available for segment:', segmentID)
+        }
+    } catch (error) {
+        console.error('❌ Error loading business sources:', error)
+        businessSources.value = []
+        formData.value.source = null
+    } finally {
+        isLoadingBusinessSources.value = false
+    }
+}
+
+const loadSegments = async () => {
+    try {
+        const response = await axios.get('/api/fields/segments')
+        segments.value = response.data
+        console.log('✅ Segments loaded:', segments.value)
+        
+        return true
+    } catch (error) {
+        console.error('❌ Error loading segments:', error)
+        return false
+    }
+}
+
+// 🔹 NEW FUNCTION - Initialize semua data dengan urutan yang benar
+const initializeFormData = async () => {
+    console.log('🚀 Starting form initialization...')
+    
+    // 1. Load default transaction values FIRST
+    await loadDefaultTrans()
+    
+    // 2. Load segment-subsegment map dan segments secara PARALEL
+    const [segmentMapLoaded, segmentsLoaded] = await Promise.all([
+        loadSegmentSubSegmentMap(),
+        loadSegments()
+    ])
+    
+    if (segmentMapLoaded && segmentsLoaded) {
+        console.log('✅ All segment data loaded successfully')
+        
+        // 🔥 JANGAN auto-select segment pertama jika sudah ada default value
+        if (!formData.value.segment && segments.value.length > 0) {
+            formData.value.segment = segments.value[0].segmentID
+            console.log('⚠️ No default segment, using first segment:', formData.value.segment)
+        } else {
+            console.log('🎯 Using default segment:', formData.value.segment)
+        }
+        
+        // 🔥 SEKARANG update sub-segment dan business source
+        if (formData.value.segment) {
+            console.log('🔄 Initializing sub-segment and business source for segment:', formData.value.segment)
+            
+            // Update sub-segment options
+            updateSubSegmentOptions(formData.value.segment)
+            
+            // Update business source options
+            await updateBusinessSourceOptions(formData.value.segment)
+            
+            // Apply default source
+            await applyDefaultSource()
+        }
+        
+        // Mark data sebagai ready
+        isDataLoaded.value = true
+        
+        console.log('🎉 Form initialization COMPLETE!', {
+            segment: formData.value.segment,
+            subSegment: formData.value.subSegment,
+            source: formData.value.source,
+            segmentMap: Object.keys(segmentSubSegmentMap.value).length,
+            segments: segments.value.length,
+            subSegments: subSegments.value.length,
+            businessSources: businessSources.value.length
+        })
+    } else {
+        console.error('❌ Failed to load segment data')
+    }
+}
+
+// 🔹 MOUNTED - Gunakan fungsi initialization yang baru
+onMounted(async () => {
+    await initializeFormData()
     nightsDisplay.value = formData.value.nights
 })
 
@@ -286,7 +571,7 @@ function saveReservation() {
     alert('Reservation data has been saved! Check console for details.')
 }
 
-// 🔹 GUEST FUNCTIONS
+// 🔹 GUEST FUNCTIONS (tetap sama)
 const loadGuests = async (params = {}) => {
     if (params.searchValue && params.searchValue.trim().length < 3) {
         console.log('❌ Search query too short, skipping load:', params.searchValue)
@@ -296,7 +581,7 @@ const loadGuests = async (params = {}) => {
     }
     isLoadingGuests.value = true
     try {
-        const response = await axios.get('/api/reservations/guests', { params })
+        const response = await axios.get('/api/fields/guests', { params })
         guests.value = response.data.data || []
         totalGuestCount.value = response.data.totalCount || 0
         console.log('✅ Guests loaded:', {
@@ -367,7 +652,7 @@ function handleLoadGuests(params) {
     loadGuests(params)
 }
 
-// 🔹 COMPANY FUNCTIONS
+// 🔹 COMPANY FUNCTIONS (tetap sama)
 const loadCompanies = async (params = {}) => {
     if (params.searchValue && params.searchValue.trim().length < 3) {
         console.log('❌ Company search query too short, skipping load:', params.searchValue)
@@ -377,28 +662,24 @@ const loadCompanies = async (params = {}) => {
     }
     isLoadingCompanies.value = true
     try {
-        // 🔹 PERBAIKAN: Pastikan parameter sesuai dengan backend
         const requestParams = {
             skip: params.skip || 0,
             take: params.take || 20,
         }
 
-        // Add search value
         if (params.searchValue && params.searchValue.trim().length >= 3) {
             requestParams.searchValue = params.searchValue.trim()
         }
 
-        // 🔹 PERBAIKAN: Ubah 'fields' menjadi 'searchFields' sesuai backend
         if (params.searchFields) {
             requestParams.searchFields = params.searchFields
         } else if (params.fields) {
-            // Fallback jika ada yang kirim 'fields'
             requestParams.searchFields = params.fields
         }
 
         console.log('📤 Loading companies with params:', requestParams)
 
-        const response = await axios.get('/api/reservations/companies', {
+        const response = await axios.get('/api/fields/companies', {
             params: requestParams
         })
 
@@ -428,9 +709,7 @@ const loadCompanies = async (params = {}) => {
 }
 
 async function openCompanyModal() {
-   
     showCompanyModal.value = true
-    
     loadCompanies({
         searchValue: '',
         fields: 'CompanyName,CompID,Address,CompPhone',
@@ -446,8 +725,6 @@ function closeCompanyModal() {
 function handleCompanySelected(company) {
     console.table(company)
 
-    // Check credit facility
-    // Check credit facility dengan SweetAlert2 yang lebih menarik
     if (company.creditFacility === 0 || company.creditFacility === "0") {
         Swal.fire({
             icon: 'error',
@@ -491,26 +768,22 @@ function handleLoadCompanies(params) {
 
 async function handlePropertyChange() {
     if (!selectedProperty.value) return
-    
+
     try {
         const response = await axios.post('/change-property', {
             ICNO: selectedProperty.value
         })
-        
-        // Cek jika response sukses
+
         if (response.data.success) {
-            // Reload halaman setelah ganti property
             window.location.reload()
         } else {
             throw new Error(response.data.error || 'Failed to change property')
         }
-        
+
     } catch (error) {
         console.error('❌ Error changing property:', error)
-        
-        // Reset ke property sebelumnya
         selectedProperty.value = currentICNO.value
-        
+
         Swal.fire({
             icon: 'error',
             title: 'Property Change Failed',
@@ -520,7 +793,7 @@ async function handlePropertyChange() {
     }
 }
 
-// Watch untuk perubahan property - HANYA trigger jika berbeda
+// Watch untuk perubahan property
 watch(selectedProperty, (newValue, oldValue) => {
     if (newValue && newValue !== oldValue && newValue !== currentICNO.value) {
         handlePropertyChange()
@@ -551,16 +824,10 @@ watch(selectedProperty, (newValue, oldValue) => {
                 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                     <div class="col-span-2 md:col-span-1">
                         <label class="block text-xs font-bold text-gray-600 mb-1">🏨 PROPERTY</label>
-                        <select 
-                            v-model="selectedProperty"
+                        <select v-model="selectedProperty"
                             class="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 text-sm"
-                            :disabled="isChangingProperty"
-                        >
-                            <option 
-                                v-for="property in properties" 
-                                :key="property.ICNO" 
-                                :value="property.ICNO"
-                            >
+                            :disabled="isChangingProperty">
+                            <option v-for="property in properties" :key="property.ICNO" :value="property.ICNO">
                                 {{ property.hotelName }}
                             </option>
                         </select>
@@ -683,36 +950,35 @@ watch(selectedProperty, (newValue, oldValue) => {
                                 <input type="number" v-model.number="formData.infant"
                                     class="w-full px-1 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-center text-sm font-bold" />
                             </div>
-                            <div>
+                            <div class="col-span-3">
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">VIP</label>
-                                <select v-model="formData.vip"
-                                    class="w-full px-1 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-xs">
-                                    <option value="">-</option>
-                                    <option>Gold</option>
-                                </select>
+                                <SelectField v-model="formData.vip" placeholder="VIP List..." api="/api/fields/vip-list"
+                                    :label="null" label-field="vipName" track-by="vipID" />
                             </div>
-                            <div class="col-span-2">
-                                <label class="text-xs font-bold text-gray-600 mb-1 block">BIRTHDAY</label>
-                                <input type="text" v-model="formData.birthday" v-flatpickr="flatpickrOptions"
-                                    class="w-full px-1 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-xs bg-white cursor-pointer"
-                                    placeholder="Pilih tanggal" readonly />
-                            </div>
+
                         </div>
 
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">GUEST TYPE</label>
-                                <select v-model="formData.guestType"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                    <option>Individual</option>
-                                </select>
+                                <SelectField v-model="formData.guestType" placeholder="Guest Type..."
+                                    api="/api/fields/guest-type-list" :label="null" label-field="guestTypeName"
+                                    track-by="guestTypeID" />
                             </div>
                             <div>
-                                <label class="text-xs font-bold text-gray-600 mb-1 block">CITY <span
-                                        class="text-red-500">*</span></label>
-                                <input v-model="formData.city"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
+                                <label class="text-xs font-bold text-gray-600 mb-1 block">BIRTHDAY</label>
+                                <input type="text" v-model="formData.birthday" v-flatpickr="flatpickrOptions"
+                                    class="w-full px-1 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-xs bg-white cursor-pointer"
+                                    placeholder="Pilih tanggal" readonly />
                             </div>
+
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-bold text-gray-600 mb-1 block">CITY <span
+                                    class="text-red-500">*</span></label>
+                            <input v-model="formData.city"
+                                class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm" />
                         </div>
 
                         <div>
@@ -725,11 +991,8 @@ watch(selectedProperty, (newValue, oldValue) => {
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">ID TYPE <span
                                         class="text-red-500">*</span></label>
-                                <select v-model="formData.identityType"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                    <option>KTP</option>
-                                    <option>Passport</option>
-                                </select>
+                                <SelectField v-model="formData.identityType" placeholder="Guest Type..."
+                                    api="/api/fields/identity" :label="null" label-field="TypeName" track-by="TypeID" />
                             </div>
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">ID NUMBER <span
@@ -755,11 +1018,9 @@ watch(selectedProperty, (newValue, oldValue) => {
 
                         <div>
                             <label class="text-xs font-bold text-gray-600 mb-1 block">NATIONALITY</label>
-                            <select v-model="formData.nationality"
-                                class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                <option>Indonesia</option>
-                                <option>USA</option>
-                            </select>
+                            <SelectField v-model="formData.nationality" placeholder="Nationality..."
+                                api="/api/fields/nationalities" :label="null" label-field="CountryName"
+                                track-by="CountryID" />
                         </div>
                     </div>
 
@@ -780,7 +1041,7 @@ watch(selectedProperty, (newValue, oldValue) => {
                             <div class="flex gap-1">
                                 <input v-model="formData.companyDisplay"
                                     class="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm"
-                                    placeholder="Search company..." disabled/>
+                                    placeholder="Search company..." disabled />
                                 <button @click="openCompanyModal" type="button"
                                     class="px-3 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-xs transition-colors flex items-center">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -795,43 +1056,36 @@ watch(selectedProperty, (newValue, oldValue) => {
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">SEGMENT <span
                                         class="text-red-500">*</span></label>
-                                <select v-model="formData.segment"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                    <option>Walk In</option>
-                                </select>
+                                <SelectField v-model="formData.segment" placeholder="Select Segment..."
+                                    :options="segments" :label="null" label-field="segmentName" track-by="segmentID" />
                             </div>
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">SUB-SEGMENT</label>
-                                <select v-model="formData.subSegment"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                    <option>-</option>
-                                </select>
+                                <SelectField v-model="formData.subSegment" placeholder="Select Sub Segment..."
+                                    :options="subSegments" :label="null" label-field="subName" track-by="subID"
+                                    :disabled="!formData.segment || subSegments.length === 0" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">ORIGIN</label>
-                                <select v-model="formData.origin"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                    <option>Jakarta</option>
-                                </select>
+                                <SelectField v-model="formData.origin" placeholder="Origin..." api="/api/fields/citys"
+                                    :label="null" label-field="CityName" track-by="cityID" />
                             </div>
                             <div>
                                 <label class="text-xs font-bold text-gray-600 mb-1 block">DESTINATION</label>
-                                <select v-model="formData.destination"
-                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                    <option>Jakarta</option>
-                                </select>
+                                <SelectField v-model="formData.destination" placeholder="Destination..."
+                                    api="/api/fields/citys" :label="null" label-field="CityName" track-by="cityID" />
                             </div>
                         </div>
 
                         <div>
                             <label class="text-xs font-bold text-gray-600 mb-1 block">SOURCE</label>
-                            <select v-model="formData.source"
-                                class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 text-sm">
-                                <option>Select</option>
-                            </select>
+                            <SelectField v-model="formData.source" placeholder="Select Source..."
+                                :options="businessSources" :label="null" label-field="busRemark" track-by="busID"
+                                :disabled="!formData.segment || businessSources.length === 0"
+                                :loading="isLoadingBusinessSources" />
                         </div>
                         <div>
                             <label class="text-xs font-bold text-gray-600 mb-1 block">CREDIT LIMIT</label>
